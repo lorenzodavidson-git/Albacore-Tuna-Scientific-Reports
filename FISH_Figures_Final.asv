@@ -1,0 +1,1488 @@
+%% Load Data
+
+addpath util
+addpath data
+addpath fish
+addpath final_data
+
+% Environmental
+load("mld.mat");
+load("sst.mat");
+load("MLD_anom.mat");
+load("SST_anom.mat");
+load("MLD_proj.mat");
+load("SST_proj.mat");
+
+prod =[-1.2 -1.2 -1.1 -.5 0 0.6 1.2 1.4 1.3 0.7 -.1 -.85];
+prod = prod-mean(prod); prod= prod/std(prod);
+
+load("PROJECTIONS.mat");
+
+% Fish Data
+load("fish.mat");
+load("fish2d.mat");
+load("fish_vertical.mat");
+load("mig_fish.mat");
+load("indiv_fish.mat");
+
+% Simulations
+load("SIMULATIONS.mat");
+
+% Other
+load("lat_centers.mat");
+load("lon_centers.mat");
+
+load("entries.mat");
+load("exits.mat");
+load("timeCCS.mat");
+load("migration_dist.mat");
+
+%%
+
+%% Figure 1
+
+% Initialize and clear the 'imon' variable
+clear imon
+
+% Define the 'imon' matrix with specific month indices
+imon(:,1) = [1 2 3 0 0 0];
+imon(:,2) = [4 5 6 0 0 0];
+imon(:,3) = [7 8 9 0 0 0];
+imon(:,4) = [10 11 12 0 0 0];
+
+% Define minimum and maximum MLD values
+mldmin = [20 20 5 10];
+mldmax = [120 120 35 35];
+
+% Calculate mean and adjusted standard deviation for 'fish.ta.data'
+mu = meanNaN(fish.ta.data, 1);
+sigma = stdNaN(fish.ta.data, 1) * 1.2;
+mint = mu - sigma * 2;
+maxt = mu + sigma * 2;
+
+mfig(1)
+
+idx = 1:12;
+
+t = tiledlayout(4, 1, 'TileSpacing', 'compact', 'Padding', 'compact');
+fieldNames = fieldnames(SIMULATIONS.present.byseason);
+
+% Loop through each season defined in 'imon'
+for iseas = 1:size(imon, 2)
+    % Create subplot for the current season
+    nexttile;
+
+    in = [];
+    
+    % Find the indices for the current season
+    for i = 1:6
+        ind = find(fish.mld.month == imon(i, iseas));
+        in = [in; ind'];
+    end
+    
+    % Calculate mean and standard deviation for MLD data in the current season
+    mn = meanNaN(fish.mld.data(in)', 1);
+    min_val = mn - stdNaN(fish.mld.data(in)', 1);
+    max_val = mn + stdNaN(fish.mld.data(in)', 1);
+
+     % Process SST data for the current season
+    ind = imon(:, iseas); ind = ind(ind ~= 0);
+    sstmean = mean(sst.seas(:, :, ind), 3);
+    sstmean2 = interp2(sst.lon', sst.lat', sstmean', mld.lon, mld.lat);
+    sstmean2(sstmean2 > maxt) = nan;
+    sstmean2(sstmean2 < mint) = nan;
+    sstmean2(~isnan(sstmean2)) = 1;
+
+    % clf
+    ind = imon(:, iseas); ind = ind(ind ~= 0);
+    tmp = mean(mld.seas(:, :, ind), 3);
+    % tmp(tmp > mldmax(iseas)) = nan;
+    % tmp(tmp < mldmin(iseas)) = nan;
+    
+    % Plot 2D map with SST and MLD data
+    FISH_2dmap(tmp .* sstmean2, mld)
+    red_blue_colormap
+    set(gca, 'ylim', [15 62])
+    set(gca, 'xlim', [-250 -100])
+    caxis([0 120])
+    colormap(parula);
+    hold on
+    
+    in = [];
+    for i = 1:6
+        ind = find(fish.lon.month == imon(i, iseas));
+        in = [in; ind];
+    end
+    plot(fish.lon.data(in), fish.lat.data(in), '.m')
+    hold on
+    
+    % Plot SST contours
+    ind = imon(:, iseas); ind = ind(ind ~= 0);
+    contour(sst.lon, sst.lat, sstmean, [mint maxt], 'linewidth', 3, 'color', 'b');
+    
+    % Add title to each subplot
+    % season_names = {'Fall: November-December-January','Winter: February-March-April', 'Spring: May-June-July', 'Summer: August-September-October'};
+    % season_names = {'Fall: October-November-December','Winter: January-February-March', 'Spring: April-May-June', 'Summer: July-August-September'};
+    % title([season_names{iseas}], 'FontSize', 12);
+    title('')
+end
+
+mfig(2)
+t = tiledlayout(4, 1,'Padding', 'compact');
+
+varnames = {'ta' 'mld' 'lon' 'u'};
+units = {'SST [deg C]' 'MLD [m]' 'Longitude [deg]' 'Zonal Velocity [deg/day]'};
+cc = [2 11 1 5];
+flags = [0 0 1 1];
+bounds(1,:) = [13 20];
+bounds(2,:) = [0 100];
+bounds(3,:) = [-180 -120];
+bounds(4,:) = [-1 1];
+for ivar = 1:4
+    nexttile;
+
+    f = fish.(varnames{ivar}); 
+    
+    fields = {'seas' 'seas_std'};
+    for i = 1:numel(fields)
+        fname = fields{i};
+        f.(fname) = f.(fname);
+    end
+    
+    h3=errorbar(f.seas,f.seas_std,'LineWidth',1,'color',gpcol(cc(ivar)))
+    set(h3, 'Marker','o','MarkerFaceColor', 'auto');
+    hold on
+    plot(1:12,f.seas,'LineWidth',2,'color',gpcol(cc(ivar)))
+    grid on
+    xticks(1:12);
+    
+    if ivar == 4
+        xticklabels({'Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'});
+    else
+        xticklabels('')
+    end
+
+    set(gca, 'FontSize', 14)
+    set(gca,'xlim', [0.5 12.5])
+    set(gca,'ylim', bounds(ivar,:))
+    ylabel (units{ivar})
+end
+
+% lpr_png fig1-final.png
+
+%% Figure 2
+
+figure(7)
+
+t = tiledlayout(2, 1,'Padding', 'compact');
+
+% Zonal Velocity Top Subplot
+nexttile
+f = fish.u; 
+
+fields = {'seas' 'seas_std'};
+for i = 1:numel(fields)
+    fname = fields{i};
+    f.(fname) = f.(fname);
+end
+
+yline(0, 'k-')
+hold on
+h3=errorbar(f.seas,f.seas_std,'LineWidth',1,'color','k')
+set(h3, 'Marker','o','MarkerFaceColor', 'auto');
+hold on
+plot(1:12,f.seas,'LineWidth',3,'color','k')
+
+grid on
+xticks(1:12);
+xticklabels({'Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'});
+set(gca, 'FontSize', 14)
+set(gca,'xlim', [0.5 12.5])
+set(gca,'ylim', [-1.5 1.5])
+ylabel ('Zonal Velocity [deg/day]')
+% set(gca, 'xtick', []);
+
+% MLD and Productivity Bottom Subplot
+
+nexttile
+
+offshore_mld = [79, 83, 60, 33, 20, 14, 11, 11, 14, 28, 47, 67];
+inshore_mld = [62, 62, 45, 31, 23, 18, 13, 13, 16, 28, 43, 61]
+
+yyaxis left
+
+plot(1:12,offshore_mld,'LineWidth',3,'color',[0, 0.45, 0.74],'LineStyle', '-')
+hold on
+plot(1:12,inshore_mld,'LineWidth',3,'color',[0.30, 0.75, 0.93],'LineStyle', '-')
+
+grid on
+xticks(1:12);
+xticklabels({'Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'});
+set(gca, 'FontSize', 14)
+set(gca,'xlim', [0.5 12.5])
+set(gca,'ylim', [0 100])
+ylabel ('MLD [m]')
+ax = gca;
+ax.YAxis(1).Color = 'k'; 
+
+yyaxis right
+
+prod_adj = prod;
+plot(1:12,prod,'LineWidth',3,'color',gpcol(5))
+set(gca,'ylim', [-4 6])
+yticks(-2:1:2)
+ylabel ('Productivity [stdv]')
+ax = gca;
+ax.YAxis(2).Color = 'k'; 
+
+box off
+set(gca, 'TickDir', 'out');            % Optional: ticks pointing out
+set(gca, 'XAxisLocation', 'bottom', ...
+         'YAxisLocation', 'left', ...
+         'LineWidth', 1); 
+
+%% Figure 3
+
+%% Figure 3
+
+figure(4)
+clf
+
+bin_daymonth = datetime(2023, 1, 1):datetime(2023, 12, 31);
+first_day_of_month = datetime(2023, 1, 1):calmonths(1):datetime(2023, 12, 31);
+first_day_indices = find(ismember(bin_daymonth, first_day_of_month));
+tags_12 = [394, 396, 1045, 1464, 1987, 2082, 2381, 2393, 2398, 2942, 1090251, 1090269];
+idx = 1:12;
+days = 1:365;
+
+% Panel 1: Average Albacore Depths
+subplot('Position', [0.05, 0.55, 0.42, 0.41]); % [left, bottom, width, height]
+
+% upper_bound = movmean(indiv_fish.day_depth(:,13) + indiv_fish.day_depth(:,14),7);
+% lower_bound = movmean(indiv_fish.day_depth(:,13) - indiv_fish.day_depth(:,14),7);
+% fill([days, fliplr(days)], [upper_bound', fliplr(lower_bound')], 'r', 'FaceAlpha', 0.1, 'EdgeColor', 'none'); % Shaded region
+hold on
+plot(days, mean(indiv_fish.day_depth(:,idx),2,'omitnan'), 'r', 'LineWidth', 2); % Mean line in black
+hold on
+
+% upper_bound = movmean(indiv_fish.night_depth(:,13) + indiv_fish.night_depth(:,14),7);
+% lower_bound = movmean(indiv_fish.night_depth(:,13) - indiv_fish.night_depth(:,14),7);
+% fill([days, fliplr(days)], [upper_bound', fliplr(lower_bound')], 'b', 'FaceAlpha', 0.1, 'EdgeColor', 'none'); % Shaded region
+hold on
+plot(days, mean(indiv_fish.night_depth(:,idx),2,'omitnan'), 'b', 'LineWidth', 2); % Mean line in black
+hold on
+
+plot(first_day_indices+15, mig_fish.seas.mld, 'k', 'LineWidth', 2, 'DisplayName', 'Mixed Layer Depth');
+
+% legend('show', 'Location', 'Best', 'FontSize', 13);
+x_labels = datestr(bin_daymonth, 'mm-dd'); % Convert day-month to strings
+first_day_of_month = datetime(2023, 1, 1):calmonths(1):datetime(2023, 12, 1);
+first_day_indices = find(ismember(bin_daymonth, first_day_of_month)); % Find indices for first day of each month
+ylabel('Depth (m)');
+set(gca, 'XTick', first_day_indices, 'XTickLabel', {'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun','Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'}); % Set ticks at first day of each month
+grid on;
+set(gca, 'FontSize', 12);
+set(gca,'xlim', [-5 370])
+set(gca, 'ylim', [0 140])
+hold off;
+
+% Panel 2: Albacore Diving Depths (Top 10th Percentile)
+subplot('Position', [0.53, 0.55, 0.42, 0.41]); % [left, bottom, width, height]
+
+% upper_bound = movmean(indiv_fish.day_depth_top10(:,13) + indiv_fish.day_depth_top10(:,14),7); 
+% lower_bound = movmean(indiv_fish.day_depth_top10(:,13) - indiv_fish.day_depth_top10(:,14),7);
+% fill([days, fliplr(days)], [upper_bound', fliplr(lower_bound')], 'r', 'FaceAlpha', 0.1, 'EdgeColor', 'none'); % Shaded region
+hold on
+plot(days, mean(indiv_fish.day_depth_top10(:,idx),2,'omitnan'),'r', 'LineWidth', 2); % Mean line in black
+hold on
+
+% upper_bound = movmean(indiv_fish.night_depth_top10(:,13) + indiv_fish.night_depth_top10(:,14),7); 
+% lower_bound = movmean(indiv_fish.night_depth_top10(:,13) - indiv_fish.night_depth_top10(:,14),7);
+% fill([days, fliplr(days)], [upper_bound', fliplr(lower_bound')], 'b', 'FaceAlpha', 0.1, 'EdgeColor', 'none'); % Shaded region
+hold on
+plot(days, mean(indiv_fish.night_depth_top10(:,idx),2,'omitnan'), 'b', 'LineWidth', 2); % Mean line in black
+hold on
+
+plot(first_day_indices+15, mig_fish.seas.mld, 'k', 'LineWidth', 2, 'DisplayName', 'Mixed Layer Depth');
+
+% legend('show', 'Location', 'Best', 'FontSize', 13);
+x_labels = datestr(bin_daymonth, 'mm-dd'); % Convert day-month to strings
+first_day_of_month = datetime(2023, 1, 1):calmonths(1):datetime(2023, 12, 1);
+first_day_indices = find(ismember(bin_daymonth, first_day_of_month)); % Find indices for first day of each month
+ylabel('Depth (m)');
+set(gca, 'XTick', first_day_indices, 'XTickLabel', {'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun','Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'}); % Set ticks at first day of each month
+grid on;
+set(gca, 'FontSize', 12);
+set(gca,'xlim', [-5 370])
+set(gca, 'ylim', [0 250])
+hold off;
+
+% Panel 3: Albacore Daytime Depth map
+subplot('Position', [0.05, 0.075, 0.42, 0.41]); % [left, bottom, width, height]
+
+world_coast('linewidth', 2, 'color', 'k')
+hold on
+set(gca,'Fontsize',12)
+set(gca, 'ylim', [20 62])
+set(gca, 'xlim', [-250 -100])
+for i = 1:length(idx)
+    field_name = sprintf('tag_%d', tags_12(idx(i)));
+    scatter(fish_vertical.(field_name).daily_lon, fish_vertical.(field_name).daily_lat, 50, fish_vertical.(field_name).day_depth, 'filled');
+    hold on
+end
+caxis([20 100]);
+cb = colorbar;
+ylabel(cb,'Albacore Depth (m)');
+cb.Label.FontSize = 13;
+ylabel('Latitude');
+xlabel('Longitude');
+% title('Average Albacore Daytime Depth', 'FontSize', 15)
+
+% Panel 4: MLD Map
+subplot('Position', [0.53, 0.075, 0.42, 0.41]); % [left, bottom, width, height]
+
+world_coast('linewidth', 2, 'color', 'k')
+hold on
+set(gca,'Fontsize',12)
+set(gca, 'ylim', [20 62])
+set(gca, 'xlim', [-250 -100])
+for i = 1:length(idx)
+    field_name = sprintf('tag_%d', tags_12(idx(i)));
+    scatter(fish_vertical.(field_name).daily_lon, fish_vertical.(field_name).daily_lat, 50, fish_vertical.(field_name).daily_mld, 'filled');
+    hold on
+end
+caxis([20 70]);
+cb = colorbar;
+ylabel(cb,'MLD Depth (m)');
+cb.Label.FontSize = 13;
+xlabel('Longitude');
+% title('Average Mixed Layer Depth', 'FontSize', 15)
+
+% lpr_png fig3-final.png
+
+%% Figure 4
+
+mfig(5)
+clf
+
+% 1. Null Model Traj
+subplot('Position', [0.05, 0.7, 0.45, 0.25]);  % [left, bottom, width, height]
+
+FISH_2dmap(sst.land, sst)
+set(gca, 'ylim', [15 62])
+colormap([0.8, 0.8, 0.8])
+colorbar off
+
+MON = [];
+U_null = [];
+V_null = [];
+TEMP_null = [];
+X_null = [];
+Y_null = [];
+
+type = "null";
+
+for n = 1:10
+    for i = 1:12
+        % Extract fish data
+        lon = fish2d(i).lon(1);
+        lat = fish2d(i).lat(1);
+        u = fish2d(i).u;
+        v = fish2d(i).v;
+        dt = fish2d(i).time(2:end) - fish2d(i).time(1:end-1);
+        time = (fish2d(i).time(2:end) + fish2d(i).time(1:end-1)) / 2;
+        month = str2num(datestr(time, 'mm'));
+        
+        % Simulate fish swimming
+        [x_temp, y_temp, tf, u, v, month] = FISH_simulate_all(lon, lat, u', v', dt, time, sst, fish, type);
+        
+        MON = [MON; month];
+
+        % Store results
+        U_null = [U_null; u];
+        V_null = [V_null; v];
+        TEMP_null = [TEMP_null; tf(1:end-1)];
+        X_null = [X_null; x_temp(1:end-1)];
+        Y_null = [Y_null; y_temp(1:end-1)];
+        
+        % Plot fish trajectory
+        plot(x_temp, y_temp, 'LineWidth', 1)
+    end
+end
+
+for i = 1:12
+    plot(fish2d(i).lon, fish2d(i).lat, 'LineWidth', 1.75, 'color', 'k')
+end
+title('Spatial Distribution of Observed vs Modeled Albacore');
+xlabel('Longitude');
+ylabel('Latitude');
+ax = gca;  % Get the current axes
+ax.Title.Position(2) = ax.Title.Position(2) +0.8; 
+
+% 2. Null Model Temperature
+
+subplot('Position', [0.545, 0.7, 0.17, 0.25]);  % [left, bottom, width, height]
+cla
+fish.bins = 0:0.1:28;
+fish_temp_pdf = histcounts(fish.ta.data, [fish.bins, max(fish.bins)+0.1], 'Normalization', 'probability') * 100;
+null_temp_pdf = histcounts(TEMP_null, [fish.bins, max(fish.bins)+0.1], 'Normalization', 'probability') * 100;
+
+plot(fish.bins, fish_temp_pdf, 'LineWidth', 1.5, 'color', 'k','DisplayName', 'Observed')
+hold on;
+grid on;
+plot(fish.bins, null_temp_pdf, 'LineWidth', 1.5, 'color', 'b', 'DisplayName', 'Simulated')
+% set(gca, 'FontSize', 14)
+% Add legend
+legend('show')
+set(gca, 'xlim', [0.1 28])
+
+title('Temperature Experienced');
+xlabel('Temperature (C)');
+ylabel('Density');
+grid on;
+ax = gca;  % Get the current axes
+ax.Title.Position(2) = 3.1; 
+
+% 3. Null Model Velocity + Longitude
+
+useas_null = zeros(1, 12);
+lonseas_null = zeros(1, 12);
+
+for imon = 1:12
+    in = find(MON == imon);
+    useas_null(imon) = mean(U_null(in));
+    lonseas_null(imon) = mean(X_null(in));
+end
+
+subplot('Position', [0.77, 0.83, 0.2, 0.12]);  % [left, bottom, width, height]
+cla
+plot(fish.u.seas, 'LineWidth', 2, 'color','k','Marker', 'o', 'DisplayName', 'Observed');
+hold on
+plot(useas_null, 'LineWidth', 2, 'LineStyle', '--', 'color','b', 'DisplayName', 'Simulated')
+
+xticklabels({})
+lgd = legend('show');
+lgd.Visible = 'off';
+ylabel('Zonal Velocity');
+set(gca, 'xlim', [0.5 12.5])
+set(gca, 'ylim', [-0.59 0.59])
+ax = gca;  % Get the current axes
+ax.Box = 'off';  % Turn off the bounding box
+title('Zonal Velocities and Longitude');
+ax.XAxisLocation = 'origin';
+ax.Title.Position(2) = 0.68; 
+
+subplot('Position', [0.77, 0.70, 0.2, 0.12]);  % [left, bottom, width, height]
+cla
+h2 = plot(fish.lon.seas, 'LineWidth', 2, 'color','k','Marker', 'o', 'DisplayName', 'Observed');
+hold on
+plot(lonseas_null, 'LineWidth', 2, 'LineStyle', '--', 'color', 'b', 'DisplayName', 'Simulated')
+lgd = legend({'Observed', 'Simulated'});
+lgd.Position = [0.78, 0.811, 0.075, 0.025];
+set(gca, 'xlim', [0.5 12.5])
+set(gca, 'ylim', [-170 -125])
+ylabel('Longitude');
+xlabel('Months')
+ax = gca;  % Get the current axes
+ax.Box = 'off';  % Turn off the bounding box
+
+% 4. Temp Model Traj
+
+subplot('Position', [0.05, 0.375, 0.45, 0.25]);  % [left, bottom, width, height]
+FISH_2dmap(sst.land, sst)
+set(gca, 'ylim', [15 62])
+colormap([0.8, 0.8, 0.8])
+colorbar off
+
+MON = [];
+U_temp1 = [];
+V_temp1 = [];
+TEMP_temp1 = [];
+X_temp1 = [];
+Y_temp1 = [];
+
+type = "temp";
+
+for n = 1:10
+    for i = 1:12
+        % Extract fish data
+        lon = fish2d(i).lon(1);
+        lat = fish2d(i).lat(1);
+        u = fish2d(i).u;
+        v = fish2d(i).v;
+        dt = fish2d(i).time(2:end) - fish2d(i).time(1:end-1);
+        time = (fish2d(i).time(2:end) + fish2d(i).time(1:end-1)) / 2;
+        month = str2num(datestr(time, 'mm'));
+        
+        % Simulate fish swimming
+        [x_temp, y_temp, tf, u, v, month] = FISH_simulate_all(lon, lat, u', v', dt, time, sst, fish, type);
+        
+        MON = [MON; month];
+
+        % Store results
+        U_temp1 = [U_temp1; u];
+        V_temp1 = [V_temp1; v];
+        TEMP_temp1 = [TEMP_temp1; tf(1:end-1)];
+        X_temp1 = [X_temp1; x_temp(1:end-1)];
+        Y_temp1 = [Y_temp1; y_temp(1:end-1)];
+        
+        % Plot fish trajectory
+        plot(x_temp, y_temp, 'LineWidth', 1)
+    end
+end
+
+% Plot fish trajectories in black
+for i = 1:12
+    plot(fish2d(i).lon, fish2d(i).lat, 'LineWidth', 1.75, 'color', 'k')
+end
+
+xlabel('Longitude');
+ylabel('Latitude');
+
+% 5. Temp Model Temperature
+
+subplot('Position', [0.545, 0.375, 0.17, 0.25]);  % [left, bottom, width, height]
+
+fish.bins = 10:0.1:24;
+fish_temp_pdf = histcounts(fish.ta.data, [fish.bins, max(fish.bins)+0.1], 'Normalization', 'probability') * 100;
+
+TEMP_temp_filt = TEMP_temp1(TEMP_temp1 > 5);
+temp_temp_pdf = histcounts(TEMP_temp_filt, [fish.bins, max(fish.bins)+0.1], 'Normalization', 'probability') * 100;
+
+plot(fish.bins, fish_temp_pdf, 'LineWidth', 1.5, 'color', 'k','DisplayName', 'Observed')
+hold on;
+grid on;
+plot(fish.bins, temp_temp_pdf, 'LineWidth', 1.5, 'color', 'r', 'DisplayName', 'Simulated')
+set(gca, 'xlim', [10 24])
+% set(gca, 'FontSize', 14)
+% Add legend
+legend('show')
+xlabel('Temperature (C)');
+ylabel('Density');
+grid on;
+
+% 6. Temp Model Velocity + Longitude
+
+useas_temp = zeros(1, 12);
+lonseas_temp = zeros(1, 12);
+
+for imon = 1:12
+    in = find(MON == imon);
+    useas_temp(imon) = mean(U_temp1(in));
+    lonseas_temp(imon) = mean(X_temp1(in));
+end
+
+subplot('Position', [0.77, 0.505, 0.2, 0.12]);  % [left, bottom, width, height]
+h1 = plot(fish.u.seas, 'LineWidth', 2, 'color','k','Marker', 'o', 'DisplayName', 'Observed');
+hold on
+plot(useas_temp, 'LineWidth', 2, 'LineStyle', '--', 'color','r', 'DisplayName', 'Simulated')
+
+xticklabels({})
+ylabel('Zonal Velocity');
+set(gca, 'xlim', [0.5 12.5])
+set(gca, 'ylim', [-0.59 0.59])
+ax = gca;  % Get the current axes
+ax.Box = 'off';  % Turn off the bounding box
+ax.XAxisLocation = 'origin';
+
+subplot('Position', [0.77, 0.375, 0.2, 0.12]);  % [left, bottom, width, height]
+h2 = plot(fish.lon.seas, 'LineWidth', 2, 'color','k','Marker', 'o', 'DisplayName', 'Observed');
+hold on
+plot(lonseas_temp, 'LineWidth', 2, 'LineStyle', '--', 'color', 'r', 'DisplayName', 'Simulated')
+lgd = legend({'Observed', 'Simulated'});
+lgd.Position = [0.78, 0.486, 0.075, 0.025];
+set(gca, 'xlim', [0.5 12.5])
+set(gca, 'ylim', [-170 -125])
+ylabel('Longitude');
+xlabel('Months')
+ax = gca;  % Get the current axes
+ax.Box = 'off';  % Turn off the bounding box
+
+% 7. Swim Model Traj
+
+subplot('Position', [0.05, 0.05, 0.45, 0.25]);
+
+FISH_2dmap(sst.land, sst)
+set(gca, 'ylim', [15 62])
+colormap([0.8, 0.8, 0.8])
+colorbar off
+
+MON = [];
+U_swim1 = [];
+V_swim1 = [];
+TEMP_swim1 = [];
+X_swim1 = [];
+Y_swim1 = [];
+
+type = "swim";
+
+for n = 1:10
+    for i = 1:12
+        % Extract fish data
+        lon = fish2d(i).lon(1);
+        lat = fish2d(i).lat(1);
+        u = fish2d(i).u;
+        v = fish2d(i).v;
+        dt = fish2d(i).time(2:end) - fish2d(i).time(1:end-1);
+        time = (fish2d(i).time(2:end) + fish2d(i).time(1:end-1)) / 2;
+        month = str2num(datestr(time, 'mm'));
+
+        % Simulate fish swimming
+        [x_swim, y_swim, tf, u, v, month] = FISH_simulate_all_edit3(lon, lat, u', v', dt, time, sst, fish, type);
+        
+        MON = [MON; month];
+
+        % Store results
+        U_swim1 = [U_swim1; u];
+        V_swim1 = [V_swim1; v];
+        TEMP_swim1 = [TEMP_swim1; tf(1:end-1)];
+        X_swim1 = [X_swim1; x_swim(1:end-1)];
+        Y_swim1 = [Y_swim1; y_swim(1:end-1)];
+        
+        % Plot fish trajectory
+        plot(x_swim, y_swim, 'LineWidth', 1)
+    end
+end
+
+for i = 1:12
+    plot(fish2d(i).lon, fish2d(i).lat, 'LineWidth', 1.75, 'color', 'k')
+end
+
+xlabel('Longitude');
+ylabel('Latitude');
+
+% 8. Swim Model Temperature
+
+subplot('Position', [0.545, 0.05, 0.17, 0.25]);  % [left, bottom, width, height]
+cla
+fish.bins = 10:0.1:24;
+fish_temp_pdf = histcounts(fish.ta.data, [fish.bins, max(fish.bins)+0.1], 'Normalization', 'probability') * 100;
+
+TEMP_swim_filt = TEMP_swim1(TEMP_swim1 > 5);
+swim_temp_pdf = histcounts(TEMP_swim_filt, [fish.bins, max(fish.bins)+0.1], 'Normalization', 'probability') * 100;
+
+plot(fish.bins, fish_temp_pdf, 'LineWidth', 1.5, 'color', 'k','DisplayName', 'Observed')
+hold on;
+grid on;
+plot(fish.bins, swim_temp_pdf, 'LineWidth', 1.5, 'color', [40 220 40]./255, 'DisplayName', 'Simulated')
+set(gca, 'xlim', [10 24])
+% set(gca, 'FontSize', 14)
+% Add legend
+legend('show')
+xlabel('Temperature (C)');
+ylabel('Density');
+grid on;
+
+% 9. Swim Model Velocity + Longitude
+
+useas_swim = zeros(1, 12);
+lonseas_swim = zeros(1, 12);
+
+for imon = 1:12
+    in = find(MON == imon);
+    useas_swim(imon) = mean(U_swim1(in));
+    lonseas_swim(imon) = mean(X_swim1(in));
+end
+
+subplot('Position', [0.77, 0.18, 0.2, 0.12]);  % [left, bottom, width, height]
+cla
+h1 = plot(fish.u.seas, 'LineWidth', 2, 'color','k','Marker', 'o', 'DisplayName', 'Observed');
+hold on
+plot(useas_swim, 'LineWidth', 2, 'LineStyle', '--', 'color',[40 220 40]./255, 'DisplayName', 'Simulated')
+
+xticklabels({})
+ylabel('Zonal Velocity');
+set(gca, 'xlim', [0.5 12.5])
+set(gca, 'ylim', [-0.59 0.59])
+ax = gca;  % Get the current axes
+ax.Box = 'off';  % Turn off the bounding box
+ax.XAxisLocation = 'origin';
+
+subplot('Position', [0.77, 0.05, 0.2, 0.12]);  % [left, bottom, width, height]
+cla
+h2 = plot(fish.lon.seas, 'LineWidth', 2, 'color','k','Marker', 'o', 'DisplayName', 'Observed');
+hold on
+plot(lonseas_swim, 'LineWidth', 2, 'LineStyle', '--', 'color', [40 220 40]./255, 'DisplayName', 'Simulated')
+lgd = legend({'Observed', 'Simulated'});
+lgd.Position = [0.78, 0.161, 0.075, 0.025];
+set(gca, 'xlim', [0.5 12.5])
+set(gca, 'ylim', [-170 -125])
+ylabel('Longitude');
+xlabel('Months')
+ax = gca;  % Get the current axes
+ax.Box = 'off';  % Turn off the bounding box
+
+% Changing font sizes
+
+axesHandles = findall(gcf, 'type', 'axes');
+
+for i = 1:length(axesHandles)
+    ax = axesHandles(i);
+    
+    % Set font size for titles and labels
+    ax.Title.FontSize = 14;  % Title font size
+    ax.XLabel.FontSize = 11;  % X-axis label font size
+    ax.YLabel.FontSize = 11;  % Y-axis label font size
+    ax.XAxis.FontSize = 11;  % X-axis tick label font size
+    ax.YAxis.FontSize = 11;  % Y-axis tick label font size
+end
+
+legends = findall(gcf, 'type', 'legend');
+for i = 1:length(legends)
+    legends(i).FontSize = 11;  % Set legend font size
+end
+
+% lpr_png fig4-final.png
+
+%% Figure 5 - Swim Model Heatmap split by Season
+
+% Initialize and clear the 'imon' variable
+clear imon
+
+imon(:,1) = [1 2 3 0 0 0];
+imon(:,2) = [4 5 6 0 0 0];
+imon(:,3) = [7 8 9 0 0 0];
+imon(:,4) = [10 11 12 0 0 0];
+
+% Calculate mean and adjusted standard deviation for 'fish.ta.data'
+mu = meanNaN(fish.ta.data, 1);
+sigma = stdNaN(fish.ta.data, 1) * 1.2;
+mint = mu - sigma * 2;
+maxt = mu + sigma * 2;
+
+figure(6)
+
+t = tiledlayout(2, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
+fieldNames = fieldnames(SIMULATIONS.present.byseason);
+
+% Loop through each season defined in 'imon'
+for iseas = 1:size(imon, 2)
+    % Create subplot for the current season
+    nexttile;
+    
+    % Initialize variables
+    in = [];
+    for i = 1:6
+        ind = find(fish.mld.month == imon(i, iseas));
+        in = [in; ind'];
+    end
+    
+    % Calculate mean and standard deviation for MLD data in the current season
+    mn = meanNaN(fish.mld.data(in)', 1);
+    min_val = mn - stdNaN(fish.mld.data(in)', 1);
+    max_val = mn + stdNaN(fish.mld.data(in)', 1);
+    
+    % Process SST data for the current season
+    ind = imon(:, iseas); ind = ind(ind ~= 0);
+    sstmean = mean(sst.seas(:, :, ind), 3);
+    sstmean2 = interp2(sst.lon', sst.lat', sstmean', mld.lon, mld.lat);
+    sstmean2(sstmean2 > maxt) = nan;
+    sstmean2(sstmean2 < mint) = nan;
+    sstmean2(~isnan(sstmean2)) = 1;
+    
+    % Access heatmap of respective season
+    currentField = fieldNames{iseas};
+    data = SIMULATIONS.present.byseason.(currentField);
+    
+    % Plot heatmap of simulated tracks
+    Zlimits = [0 75];
+    plotMap(lon_centers, lat_centers, data, '', 'Density', parula, Zlimits);
+    xlabel(''); ylabel('');
+    hold on;
+    
+    % Find and plot fish longitude and latitude data
+    in = [];
+    for i = 1:6
+        ind = find(fish.lon.month == imon(i, iseas));
+        in = [in; ind];
+    end
+    % Adjust transparency of the pink points
+    scatter(fish.lon.data(in), fish.lat.data(in), 10, 'm', 'filled', 'MarkerFaceAlpha', 0.6);
+    hold on;
+    
+    % Plot SST contours
+    contour(sst.lon, sst.lat, sstmean, [mint maxt], 'linewidth', 2, 'color', 'b');
+    
+    % % Add title to each subplot
+    % season_names = {'February-March-April', 'May-June-July', 'August-September-October', 'November-December-January'};
+    % title(['Season: ', season_names{iseas}], 'FontSize', 12);
+    title('')
+end
+
+% Adjust overall figure properties
+sgtitle('Simulated Density and Tagged Data by Season', 'FontSize', 16); % Add a super-title
+
+% lpr_png fig5-final.png
+
+%% Figure 6
+
+models = {"Present","SST & MLD"};
+
+cmap = [linspace(0, 1, 128)', linspace(0, 1, 128)', ones(128, 1); % Blue to White
+        ones(128, 1), linspace(1, 0, 128)', linspace(1, 0, 128)']; % White to Red
+custom_cmap = [0 0 0.7; ...      % Green for only modelB (associated with -999)
+               0.5 0.5 0.5; ... % Gray for NaN (ocean or undefined regions)
+               cmap; ... % Normal percentage difference map
+               0.7 0 0];         % Yellow for only modelA (associated with 999)
+
+mfig(7)
+
+subplot('Position', [0.05, 0.55, 0.41, 0.43]);  % [left, bottom, width, height]
+cla
+
+Zlimits = [0 120];
+plotMap(lon_centers,lat_centers,SIMULATIONS.present.counts,'Reference Albacore Distribution','# of Albacore',parula,Zlimits)
+xlabel('Longitude');
+set(gca,'fontsize',14)
+title('');
+
+subplot('Position', [0.54, 0.55, 0.41, 0.43]);  % [left, bottom, width, height]
+cla
+
+Zlimits = [-100 100];
+plotMap(lon_centers,lat_centers,SIMULATIONS.sstmld.diff_map,'Difference 2070-2099 Projected SST & MLD - Reference','Difference in # of Albacore',custom_cmap,Zlimits)
+ylabel('');
+xlabel('Longitude');
+set(gca,'fontsize',14)
+title('');
+
+subplot('Position', [0.05, 0.05, 0.19, 0.40]);  % [left, bottom, width, height]
+cla
+
+boxplot(entries.processed.shifted(:,[1,4]), models, 'Colors', 'rb', 'Symbol', 'o','Positions', [1,1.5], 'Widths', 0.2);
+xlabel('Scenario');
+ylabel('Day of Year');
+grid on;
+
+hold on
+obs_value = mod(entries.stats.mean - entries.processed.mean + 182.5, 365);
+obs_median = prctile(obs_value,50);
+plot(ones(size(obs_median)), obs_median, 'kp', 'MarkerSize', 10, 'MarkerFaceColor', 'k', 'DisplayName', 'Observed'); 
+
+set(findobj(gca, 'Type', 'Line'), 'LineWidth', 1.2);  % Thicker whiskers and box edges
+set(findobj(gca, 'Tag', 'Median'), 'LineWidth', 2); % Thicker median line
+set(gca,'fontsize',14)
+xlabel('');
+legend('show', 'Location', 'southwest');
+
+% Label ticks with months
+month_starts = [1, 32, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335];
+shifted_month_starts = mod(month_starts - entries.processed.mean + 182.5, 365);
+[shifted_month_starts_sorted, idx] = sort(shifted_month_starts);
+month_labels = {'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'};
+yticks(shifted_month_starts_sorted);
+yticklabels(month_labels(idx));
+
+subplot('Position', [0.29, 0.05, 0.19, 0.40]);  % [left, bottom, width, height]
+cla
+
+boxplot(exits.processed.shifted(:,[1,4]), models, 'Colors', 'rb', 'Symbol', 'o','Positions', [1,1.5], 'Widths', 0.2);
+xlabel('Scenario');
+ylabel('Day of Year');
+grid on;
+
+hold on
+obs_value = mod(exits.stats.mean - exits.processed.mean + 182.5, 365);
+obs_median = prctile(obs_value,50);
+plot(ones(size(obs_median)), obs_median, 'kp', 'MarkerSize', 10, 'MarkerFaceColor', 'k', 'DisplayName', 'Observed'); 
+
+set(findobj(gca, 'Type', 'Line'), 'LineWidth', 1.2);  % Thicker whiskers and box edges
+set(findobj(gca, 'Tag', 'Median'), 'LineWidth', 2); % Thicker median line
+set(gca,'fontsize',14)
+xlabel('');
+legend('show', 'Location', 'southeast');
+
+% Label ticks with months
+month_starts = [1, 32, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335];
+shifted_month_starts = mod(month_starts - exits.processed.mean + 182.5, 365);
+[shifted_month_starts_sorted, idx] = sort(shifted_month_starts);
+month_labels = {'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'};
+yticks(shifted_month_starts_sorted);
+yticklabels(month_labels(idx));
+
+subplot('Position', [0.525, 0.05, 0.19, 0.40]);  % [left, bottom, width, height]
+cla
+
+boxplot(timeCCS.processed.all2(:,[1,4]), models, 'Colors', 'rb', 'Symbol', 'o','Positions', [1,1.5], 'Widths', 0.2);
+xlabel('Scenario');
+ylabel('Days');
+title('');
+grid on;
+hold on 
+obs_median = prctile(timeCCS.stats.mean2,50);
+plot(ones(size(obs_median)), obs_median, 'kp', 'MarkerSize', 10, 'MarkerFaceColor', 'k', 'DisplayName', 'Observed'); 
+hold off;
+
+set(findobj(gca, 'Type', 'Line'), 'LineWidth', 1.2);  % Thicker whiskers and box edges
+set(findobj(gca, 'Tag', 'Median'), 'LineWidth', 2); % Thicker median line
+set(gca,'fontsize',14)
+xlabel('');
+legend('show', 'Location', 'southeast');
+
+subplot('Position', [0.77, 0.05, 0.19, 0.40]);  % [left, bottom, width, height]
+cla
+
+boxplot(migration_dist.processed.all(:,[1,4]), models, 'Colors', 'rb', 'Symbol', 'o','Positions', [1,1.5], 'Widths', 0.2);
+xlabel('Scenario');
+ylabel('Distance (km)');
+title('');
+grid on;
+hold on
+obs_median = prctile(migration_dist.stats.mean,50);
+plot(ones(size(obs_median)), obs_median, 'kp', 'MarkerSize', 10, 'MarkerFaceColor', 'k', 'DisplayName', 'Observed'); 
+
+set(findobj(gca, 'Type', 'Line'), 'LineWidth', 1.2);  % Thicker whiskers and box edges
+set(findobj(gca, 'Tag', 'Median'), 'LineWidth', 2); % Thicker median line
+set(gca,'fontsize',14)
+xlabel('');
+legend('show', 'Location', 'southeast');
+
+hold off
+
+% Adjust figure size
+set(gcf, 'Position', [100, 100, 1200, 800]); % Resize figure for better visibility
+
+% lpr_png fig6-final.png
+
+%% Supplementary Figures
+
+%% Supplementary Figure 1
+
+mfig(8)
+indv = 11;
+tags = {'tag_394', 'tag_396', 'tag_1045', 'tag_1464', 'tag_1987', 'tag_2082', ...
+           'tag_2381', 'tag_2393', 'tag_2398', 'tag_2942', 'tag_1090251', 'tag_1090269'};
+tag = tags{indv};
+
+date_labels = datetime(fish_vertical.(tag).unique_day, 'ConvertFrom', 'datenum');
+
+t = tiledlayout(2,2,'TileSpacing','compact','Padding','compact');
+
+nexttile(1)
+plot(date_labels, fish_vertical.(tag).daily_mld,'b',"Linewidth",1.5,'DisplayName','Average MLD')
+hold on
+plot(date_labels, fish_vertical.(tag).day_depth,'r',"Linewidth",1.5,'DisplayName','Average Daytime Depth')
+ylim([0, 200]);
+grid on;
+ylabel('Depth (m)')
+legend('show', 'Location', 'best', 'FontSize', 13)
+
+window_size = 14;
+rolling_avg = movmean(fish_vertical.(tag).day_depth_top10, window_size);
+
+nexttile(3)
+yyaxis left
+plot(date_labels, fish_vertical.(tag).day_depth_top10,'r',"Linewidth",0.5,'DisplayName','Dive Depth')
+hold on
+plot(date_labels, rolling_avg,'r',"Linewidth",1.5,'DisplayName','2-week Average')
+ylim([0, 300]);
+ylabel('Depth (m)')
+yyaxis right
+plot(date_labels, fish_vertical.(tag).daily_lon,'k',"Linewidth",1.5,'DisplayName','Longitude')
+grid on;
+ylabel('Longitude')
+legend('show', 'Location', 'best', 'FontSize', 13)
+
+nexttile(2,[2 1]) % spans 2 rows, 1 column
+world_coast('linewidth', 2, 'color', 'k')
+hold on
+set(gca, 'ylim', [15 62])
+set(gca, 'xlim', [-250 -100])
+
+lon = fish2d(indv).lon;
+lat = fish2d(indv).lat;
+m = month(datetime(fish2d(indv).time, 'ConvertFrom', 'datenum'));
+
+cmap = parula(12); % Use a colormap with 12 colors
+scatter(lon, lat, 30, cmap(m, :), 'filled'); % Color by month
+
+c = colorbar;
+colormap(cmap);
+c.Ticks = linspace(1/24, 23/24, 12); % Set ticks at the center of each color
+c.TickLabels = {'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', ...
+                'Sep', 'Oct', 'Nov', 'Dec'};
+c.Label.String = 'Month';
+
+mfig(9)
+indv = 12;
+tags = {'tag_394', 'tag_396', 'tag_1045', 'tag_1464', 'tag_1987', 'tag_2082', ...
+           'tag_2381', 'tag_2393', 'tag_2398', 'tag_2942', 'tag_1090251', 'tag_1090269'};
+tag = tags{indv};
+
+date_labels = datetime(fish_vertical.(tag).unique_day, 'ConvertFrom', 'datenum');
+
+t = tiledlayout(2,2,'TileSpacing','compact','Padding','compact');
+
+nexttile(1)
+plot(date_labels, fish_vertical.(tag).daily_mld,'b',"Linewidth",1.5,'DisplayName','Average MLD')
+hold on
+plot(date_labels, fish_vertical.(tag).day_depth,'r',"Linewidth",1.5,'DisplayName','Average Daytime Depth')
+ylim([0, 200]);
+grid on;
+ylabel('Depth (m)')
+legend('show', 'Location', 'best', 'FontSize', 13)
+
+window_size = 14;
+rolling_avg = movmean(fish_vertical.(tag).day_depth_top10, window_size);
+
+nexttile(3)
+yyaxis left
+plot(date_labels, fish_vertical.(tag).day_depth_top10,'r',"Linewidth",0.5,'DisplayName','Dive Depth')
+hold on
+plot(date_labels, rolling_avg,'r',"Linewidth",1.5,'DisplayName','2-week Average')
+ylim([0, 300]);
+ylabel('Depth (m)')
+yyaxis right
+plot(date_labels, fish_vertical.(tag).daily_lon,'k',"Linewidth",1.5,'DisplayName','Longitude')
+grid on;
+ylabel('Longitude')
+legend('show', 'Location', 'best', 'FontSize', 13)
+
+nexttile(2,[2 1]) % spans 2 rows, 1 column
+world_coast('linewidth', 2, 'color', 'k')
+hold on
+set(gca, 'ylim', [15 62])
+set(gca, 'xlim', [-250 -100])
+
+lon = fish2d(indv).lon;
+lat = fish2d(indv).lat;
+m = month(datetime(fish2d(indv).time, 'ConvertFrom', 'datenum'));
+
+cmap = parula(12); % Use a colormap with 12 colors
+scatter(lon, lat, 30, cmap(m, :), 'filled'); % Color by month
+
+c = colorbar;
+colormap(cmap);
+c.Ticks = linspace(1/24, 23/24, 12); % Set ticks at the center of each color
+c.TickLabels = {'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', ...
+                'Sep', 'Oct', 'Nov', 'Dec'};
+c.Label.String = 'Month';
+
+%% Supplementary Figure 2
+
+mfig(10)
+indv = 6;
+tags = {'tag_394', 'tag_396', 'tag_1045', 'tag_1464', 'tag_1987', 'tag_2082', ...
+           'tag_2381', 'tag_2393', 'tag_2398', 'tag_2942', 'tag_1090251', 'tag_1090269'};
+tag = tags{indv};
+
+date_labels = datetime(fish_vertical.(tag).unique_day, 'ConvertFrom', 'datenum');
+
+t = tiledlayout(2,2,'TileSpacing','compact','Padding','compact');
+
+nexttile(1)
+plot(date_labels, fish_vertical.(tag).daily_mld,'b',"Linewidth",1.5,'DisplayName','Average MLD')
+hold on
+plot(date_labels, fish_vertical.(tag).day_depth,'r',"Linewidth",1.5,'DisplayName','Average Daytime Depth')
+ylim([0, 200]);
+grid on;
+ylabel('Depth (m)')
+legend('show', 'Location', 'best', 'FontSize', 13)
+
+window_size = 14;
+rolling_avg = movmean(fish_vertical.(tag).day_depth_top10, window_size);
+
+nexttile(3)
+yyaxis left
+plot(date_labels, fish_vertical.(tag).day_depth_top10,'r',"Linewidth",0.5,'DisplayName','Dive Depth')
+hold on
+plot(date_labels, rolling_avg,'r',"Linewidth",1.5,'DisplayName','2-week Average')
+ylim([0, 300]);
+ylabel('Depth (m)')
+yyaxis right
+plot(date_labels, fish_vertical.(tag).daily_lon,'k',"Linewidth",1.5,'DisplayName','Longitude')
+grid on;
+ylabel('Longitude')
+legend('show', 'Location', 'best', 'FontSize', 13)
+
+nexttile(2,[2 1]) % spans 2 rows, 1 column
+world_coast('linewidth', 2, 'color', 'k')
+hold on
+set(gca, 'ylim', [15 62])
+set(gca, 'xlim', [-250 -100])
+
+lon = fish2d(indv).lon;
+lat = fish2d(indv).lat;
+m = month(datetime(fish2d(indv).time, 'ConvertFrom', 'datenum'));
+
+cmap = parula(12); % Use a colormap with 12 colors
+scatter(lon, lat, 30, cmap(m, :), 'filled'); % Color by month
+
+c = colorbar;
+colormap(cmap);
+c.Ticks = linspace(1/24, 23/24, 12); % Set ticks at the center of each color
+c.TickLabels = {'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', ...
+                'Sep', 'Oct', 'Nov', 'Dec'};
+c.Label.String = 'Month';
+
+mfig(11)
+indv = 4;
+tags = {'tag_394', 'tag_396', 'tag_1045', 'tag_1464', 'tag_1987', 'tag_2082', ...
+           'tag_2381', 'tag_2393', 'tag_2398', 'tag_2942', 'tag_1090251', 'tag_1090269'};
+tag = tags{indv};
+
+date_labels = datetime(fish_vertical.(tag).unique_day, 'ConvertFrom', 'datenum');
+
+t = tiledlayout(2,2,'TileSpacing','compact','Padding','compact');
+
+nexttile(1)
+plot(date_labels, fish_vertical.(tag).daily_mld,'b',"Linewidth",1.5,'DisplayName','Average MLD')
+hold on
+plot(date_labels, fish_vertical.(tag).day_depth,'r',"Linewidth",1.5,'DisplayName','Average Daytime Depth')
+ylim([0, 200]);
+grid on;
+ylabel('Depth (m)')
+legend('show', 'Location', 'best', 'FontSize', 13)
+
+window_size = 14;
+rolling_avg = movmean(fish_vertical.(tag).day_depth_top10, window_size);
+
+nexttile(3)
+yyaxis left
+plot(date_labels, fish_vertical.(tag).day_depth_top10,'r',"Linewidth",0.5,'DisplayName','Dive Depth')
+hold on
+plot(date_labels, rolling_avg,'r',"Linewidth",1.5,'DisplayName','2-week Average')
+ylim([0, 300]);
+ylabel('Depth (m)')
+yyaxis right
+plot(date_labels, fish_vertical.(tag).daily_lon,'k',"Linewidth",1.5,'DisplayName','Longitude')
+grid on;
+ylabel('Longitude')
+legend('show', 'Location', 'best', 'FontSize', 13)
+
+nexttile(2,[2 1]) % spans 2 rows, 1 column
+world_coast('linewidth', 2, 'color', 'k')
+hold on
+set(gca, 'ylim', [15 62])
+set(gca, 'xlim', [-250 -100])
+
+lon = fish2d(indv).lon;
+lat = fish2d(indv).lat;
+m = month(datetime(fish2d(indv).time, 'ConvertFrom', 'datenum'));
+
+cmap = parula(12); % Use a colormap with 12 colors
+scatter(lon, lat, 30, cmap(m, :), 'filled'); % Color by month
+
+c = colorbar;
+colormap(cmap);
+c.Ticks = linspace(1/24, 23/24, 12); % Set ticks at the center of each color
+c.TickLabels = {'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', ...
+                'Sep', 'Oct', 'Nov', 'Dec'};
+c.Label.String = 'Month';
+
+%% Supplementary Figure 3 - SST and MLD Projection Anomalies
+
+% SST
+mfig(12)
+clf
+t = tiledlayout(2, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
+
+nexttile;
+pcolor(SST_anom.lon_interp, SST_anom.lat_interp, SST_anom.jfm_interp);
+shading interp;
+cb = colorbar(); 
+ylabel(cb,'Temperature Anomaly (C)')
+title("JFM");
+ylabel("Latitude")
+xlabel("Longitude")
+colormap(gca, flipud(hot));
+% colormap(flipud(hot));
+caxis([1.5 3.5]);
+
+hold on
+world_coast('linewidth', 2, 'color', 'k')
+set(gca,'Fontsize',14)
+set(gca, 'ylim', [15 62])
+set(gca, 'xlim', [-250 -100])
+
+nexttile;
+pcolor(SST_anom.lon_interp, SST_anom.lat_interp, SST_anom.amj_interp);
+shading interp;
+cb = colorbar(); 
+ylabel(cb,'Temperature Anomaly (C)')
+title("AMJ");
+ylabel("Latitude")
+xlabel("Longitude")
+colormap(gca, flipud(hot));
+caxis([1.5 3.5]);
+
+hold on
+world_coast('linewidth', 2, 'color', 'k')
+set(gca,'Fontsize',14)
+set(gca, 'ylim', [15 62])
+set(gca, 'xlim', [-250 -100])
+
+nexttile;
+pcolor(SST_anom.lon_interp, SST_anom.lat_interp, SST_anom.jas_interp);
+shading interp;
+cb = colorbar(); 
+ylabel(cb,'Temperature Anomaly (C)')
+title("JAS");
+ylabel("Latitude")
+xlabel("Longitude")
+colormap(gca, flipud(hot));
+caxis([1.5 3.5]);
+
+hold on
+world_coast('linewidth', 2, 'color', 'k')
+set(gca,'Fontsize',14)
+set(gca, 'ylim', [15 62])
+set(gca, 'xlim', [-250 -100])
+
+nexttile;
+pcolor(SST_anom.lon_interp, SST_anom.lat_interp, SST_anom.ond_interp);
+shading interp;
+cb = colorbar(); 
+ylabel(cb,'Temperature Anomaly (C)')
+title("OND");
+ylabel("Latitude")
+xlabel("Longitude")
+colormap(gca, flipud(hot));
+caxis([1.5 3.5]);
+
+hold on
+world_coast('linewidth', 2, 'color', 'k')
+set(gca,'Fontsize',14)
+set(gca, 'ylim', [15 62])
+set(gca, 'xlim', [-250 -100])
+
+
+% MLD
+mfig(13)
+clf
+t = tiledlayout(2, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
+
+nexttile;
+pcolor(MLD_anom.lon_interp, MLD_anom.lat_interp, MLD_anom.jfm_interp);
+shading interp;
+cb = colorbar(); 
+ylabel(cb,'MLD Anomaly (m)')
+title("JFM");
+ylabel("Latitude")
+xlabel("Longitude")
+colormap(hot)
+caxis([-25 5]);
+
+hold on
+world_coast('linewidth', 2, 'color', 'k')
+set(gca,'Fontsize',14)
+set(gca, 'ylim', [15 62])
+set(gca, 'xlim', [-250 -100])
+
+nexttile;
+pcolor(MLD_anom.lon_interp, MLD_anom.lat_interp, MLD_anom.amj_interp);
+shading interp;
+cb = colorbar(); 
+ylabel(cb,'MLD Anomaly (m)')
+title("AMJ");
+ylabel("Latitude")
+xlabel("Longitude")
+colormap(hot)
+caxis([-25 5]);
+
+hold on
+world_coast('linewidth', 2, 'color', 'k')
+set(gca,'Fontsize',14)
+set(gca, 'ylim', [15 62])
+set(gca, 'xlim', [-250 -100])
+
+nexttile;
+pcolor(MLD_anom.lon_interp, MLD_anom.lat_interp, MLD_anom.jas_interp);
+shading interp;
+cb = colorbar(); 
+ylabel(cb,'MLD Anomaly (m)')
+title("JAS");
+ylabel("Latitude")
+xlabel("Longitude")
+colormap(hot)
+caxis([-25 5]);
+
+hold on
+world_coast('linewidth', 2, 'color', 'k')
+set(gca,'Fontsize',14)
+set(gca, 'ylim', [15 62])
+set(gca, 'xlim', [-250 -100])
+
+nexttile;
+pcolor(MLD_anom.lon_interp, MLD_anom.lat_interp, MLD_anom.ond_interp);
+shading interp;
+cb = colorbar(); 
+ylabel(cb,'MLD Anomaly (m)')
+title("OND");
+ylabel("Latitude")
+xlabel("Longitude")
+colormap(hot)
+caxis([-25 5]);
+
+hold on
+world_coast('linewidth', 2, 'color', 'k')
+set(gca,'Fontsize',14)
+set(gca, 'ylim', [15 62])
+set(gca, 'xlim', [-250 -100])
+
+% lpr_png fig3-supp.png
+
+%% Supplementary Figure 4 - SST and MLD scenarios exits, entry, time in CCS, migration distance
+
+
+models = {"Present","SST", "MLD", "SST & MLD"};
+
+cmap = [linspace(0, 1, 128)', linspace(0, 1, 128)', ones(128, 1); % Blue to White
+        ones(128, 1), linspace(1, 0, 128)', linspace(1, 0, 128)']; % White to Red
+custom_cmap = [0 0 0.7; ...      % Green for only modelB (associated with -999)
+               0.5 0.5 0.5; ... % Gray for NaN (ocean or undefined regions)
+               cmap; ... % Normal percentage difference map
+               0.7 0 0];         % Yellow for only modelA (associated with 999)
+
+mfig(14);
+
+subplot('Position', [0.05, 0.55, 0.41, 0.43]);  % [left, bottom, width, height]
+cla
+
+Zlimits = [-100 100];
+plotMap(lon_centers,lat_centers,SIMULATIONS.sst.diff_map,'Difference 2070-2099 Projected SST - Reference','Difference in # of Albacore',custom_cmap,Zlimits)
+xlabel('Longitude');
+set(gca,'fontsize',14)
+title('2070-2099 SST-only Scenario');
+
+subplot('Position', [0.54, 0.55, 0.41, 0.43]);  % [left, bottom, width, height]
+cla
+
+Zlimits = [-100 100];
+plotMap(lon_centers,lat_centers,SIMULATIONS.mld.diff_map,'Difference 2070-2099 Projected MLD - Reference','Difference in # of Albacore',custom_cmap,Zlimits)
+ylabel('');
+xlabel('Longitude');
+set(gca,'fontsize',14)
+title('2070-2099 MLD-only Scenario');
+
+subplot('Position', [0.05, 0.05, 0.19, 0.40]);  % [left, bottom, width, height]
+cla
+
+boxplot(entries.processed.shifted, models, 'Colors', 'rbgk', 'Symbol', 'o','Positions', [1,1.5,2,2.5], 'Widths', 0.2);
+xlabel('Scenario');
+ylabel('Day of Year');
+grid on;
+
+hold on
+obs_value = mod(entries.stats.mean - entries.processed.mean + 182.5, 365);
+obs_median = prctile(obs_value,50);
+plot(ones(size(obs_median)), obs_median, 'kp', 'MarkerSize', 10, 'MarkerFaceColor', 'k', 'DisplayName', 'Observed'); 
+
+set(findobj(gca, 'Type', 'Line'), 'LineWidth', 1.2);  % Thicker whiskers and box edges
+set(findobj(gca, 'Tag', 'Median'), 'LineWidth', 2); % Thicker median line
+set(gca,'fontsize',14)
+xlabel('');
+legend('show', 'Location', 'southwest');
+
+% Label ticks with months
+month_starts = [1, 32, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335];
+shifted_month_starts = mod(month_starts - entries.processed.mean + 182.5, 365);
+[shifted_month_starts_sorted, idx] = sort(shifted_month_starts);
+month_labels = {'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'};
+yticks(shifted_month_starts_sorted);
+yticklabels(month_labels(idx));
+
+subplot('Position', [0.29, 0.05, 0.19, 0.40]);  % [left, bottom, width, height]
+cla
+
+boxplot(exits.processed.shifted, models, 'Colors', 'rbgk', 'Symbol', 'o','Positions', [1,1.5,2,2.5], 'Widths', 0.2);
+xlabel('Scenario');
+ylabel('Day of Year');
+grid on;
+
+hold on
+obs_value = mod(exits.stats.mean - exits.processed.mean + 182.5, 365);
+obs_median = prctile(obs_value,50);
+plot(ones(size(obs_median)), obs_median, 'kp', 'MarkerSize', 10, 'MarkerFaceColor', 'k', 'DisplayName', 'Observed'); 
+
+set(findobj(gca, 'Type', 'Line'), 'LineWidth', 1.2);  % Thicker whiskers and box edges
+set(findobj(gca, 'Tag', 'Median'), 'LineWidth', 2); % Thicker median line
+set(gca,'fontsize',14)
+xlabel('');
+legend('show', 'Location', 'southeast');
+
+% Label ticks with months
+month_starts = [1, 32, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335];
+shifted_month_starts = mod(month_starts - exits.processed.mean + 182.5, 365);
+[shifted_month_starts_sorted, idx] = sort(shifted_month_starts);
+month_labels = {'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'};
+yticks(shifted_month_starts_sorted);
+yticklabels(month_labels(idx));
+
+subplot('Position', [0.525, 0.05, 0.19, 0.40]);  % [left, bottom, width, height]
+cla
+
+boxplot(timeCCS.processed.all2, models, 'Colors', 'rbgk', 'Symbol', 'o','Positions', [1,1.5,2,2.5], 'Widths', 0.2);
+xlabel('Scenario');
+ylabel('Days');
+title('');
+grid on;
+hold on 
+obs_median = prctile(timeCCS.stats.mean2,50);
+plot(ones(size(obs_median)), obs_median, 'kp', 'MarkerSize', 10, 'MarkerFaceColor', 'k', 'DisplayName', 'Observed'); 
+hold off;
+
+set(findobj(gca, 'Type', 'Line'), 'LineWidth', 1.2);  % Thicker whiskers and box edges
+set(findobj(gca, 'Tag', 'Median'), 'LineWidth', 2); % Thicker median line
+set(gca,'fontsize',14)
+xlabel('');
+legend('show', 'Location', 'southeast');
+
+subplot('Position', [0.77, 0.05, 0.19, 0.40]);  % [left, bottom, width, height]
+cla
+
+boxplot(migration_dist.processed.all, models, 'Colors', 'rbgk', 'Symbol', 'o','Positions', [1,1.5,2,2.5], 'Widths', 0.2);
+xlabel('Scenario');
+ylabel('Distance (km)');
+title('');
+grid on;
+hold on
+obs_median = prctile(migration_dist.stats.mean,50);
+plot(ones(size(obs_median)), obs_median, 'kp', 'MarkerSize', 10, 'MarkerFaceColor', 'k', 'DisplayName', 'Observed'); 
+
+set(findobj(gca, 'Type', 'Line'), 'LineWidth', 1.2);  % Thicker whiskers and box edges
+set(findobj(gca, 'Tag', 'Median'), 'LineWidth', 2); % Thicker median line
+set(gca,'fontsize',14)
+xlabel('');
+legend('show', 'Location', 'southeast');
+
+hold off
+set(gcf, 'Position', [100, 100, 1200, 800]); 
+
+% lpr_png fig4-supp.png
+
+
+
+
+
+%% Changes in Albacore Migration Timing 
+
+time = 1:12;
+
+mfig(6);
+clf
+t = tiledlayout(2, 1, 'TileSpacing', 'compact'); % 2x2 grid of subplots
+
+% Zonal Velocity
+nexttile
+plot(time, SIMULATIONS.present.useas, '-o', 'Color', 'k', 'LineWidth', 2.5, 'DisplayName', 'Longitude Sim 1');
+hold on
+plot(time, SIMULATIONS.sst.useas, '--s', 'Color', 'r', 'LineWidth', 2, 'DisplayName', 'Longitude Sim 2');
+hold on
+plot(time, SIMULATIONS.mld.useas, '--d', 'Color', 'b', 'LineWidth', 2, 'DisplayName', 'Longitude Sim 3');
+ylabel('Zonal Velocity');
+ylim([-0.5 0.5]); % Adjust according to your longitude data range
+set(gca,'xlim', [0.5 12.5])
+xlabel('Month');
+
+fill([time+13, fliplr(time+13)], [SIMULATIONS.sst.percent_inside_ccs', zeros(1, length(time))], 'r', 'FaceAlpha', 1, 'EdgeColor', 'none', 'DisplayName', '% Albacore Sim 2');
+fill([time+13, fliplr(time+13)], [SIMULATIONS.mld.percent_inside_ccs', zeros(1, length(time))], 'b', 'FaceAlpha', 1, 'EdgeColor', 'none', 'DisplayName', '% Albacore Sim 3');
+plot(time+13, SIMULATIONS.sst.percent_inside_ccs', '-', 'LineWidth', 1.5, 'Color', 'r', 'DisplayName', '% Albacore Sim 2');
+plot(time+13, SIMULATIONS.mld.percent_inside_ccs', '-', 'LineWidth', 1.5, 'Color', 'b', 'DisplayName', '% Albacore Sim 3');
+
+x_limits = get(gca, 'xlim'); % Get current x-axis limits
+plot(x_limits, [0 0], 'k', 'LineWidth', 1); % 'k' for black, LineWidth = 2 for a thicker line
+grid on
+set(gca,'FontSize', 13)
+ax = gca;
+ax
