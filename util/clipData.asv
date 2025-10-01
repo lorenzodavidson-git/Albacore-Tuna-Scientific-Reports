@@ -1,0 +1,15 @@
+function [clipped_matrix, clipped_lon, clipped_lat] = clipData(matrix, lon, lat, lon_min, lon_max, lat_min, lat_max)
+    % Find indices within the longitude bounds
+    lon_idx = lon >= lon_min & lon <= lon_max;
+    
+    % Find indices within the latitude bounds
+    lat_idx = lat >= lat_min & lat <= lat_max;
+    
+    % Clip the matrix to the specified bounds
+    clipped_matrix = matrix(lon_idx, lat_idx);
+    
+    % Update latitude and longitude vectors
+    lon = lon(lon_idx);
+    lat = lat(lat_idx);
+    [clipped_lat,clipped_lon] = meshgrid(lat,lon_proj);
+end

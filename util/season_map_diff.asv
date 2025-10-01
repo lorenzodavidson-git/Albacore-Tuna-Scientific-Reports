@@ -1,0 +1,41 @@
+function updated_simulations = season_map_diff(simulations,scenario)
+    present = simulations.present.byseason;
+    if scenario == "sst"
+        future = simulations.sst.byseason;
+    elseif scenario == "mld"
+        future = simulations.mld.byseason;
+    elseif scenario == "sstmld"
+        future = simulations.sstmld.byseason;
+    end
+
+    fieldNames = fieldnames(present);
+    newFields = {'fma_diff','mjj_diff','aso_diff','ndj_diff'};
+    for i = 1:4
+        currentField = fieldNames{i};
+        future_data = future.(currentField);
+        present_data = present.(currentField);
+        
+        newField =  newFields{i};
+        diff.(newField) = future_data - present_data;
+        diff.(newField)(future_data > 0 & present_data == 0) = 99999;
+        diff.(newField)(future_data == 0 & present_data > 0) = -99999;
+        diff.(newField)(future_data == 0 & present_data == 0) = NaN;
+    end
+
+    if scenario == "sst"
+        for i = 1:length(newFields)
+            newField = newFields{i};
+            simulations.sst.byseason.(newField) = diff.(newField);
+        end
+    elseif scenario == "mld"
+        for i = 1:length(newFields)
+            newField = newFields{i};
+            simulations.mld.byseason.(newField) = diff.(newField);
+        end
+    elseif scenario == "sstmld"
+        for i = 1:length(newFields)
+            newField = newFields{i};
+            simulations.sstmld.byseason.(newField) = diff.(newField);
+        end
+    end
+end
